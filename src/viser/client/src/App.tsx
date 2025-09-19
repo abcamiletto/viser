@@ -9,6 +9,8 @@ import { Notifications } from "@mantine/notifications";
 import { Environment, PerformanceMonitor, Stats, Bvh } from "@react-three/drei";
 import * as THREE from "three";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
+import { XR, Controllers, Hands, VRButton, ARButton } from '@react-three/xr';
+
 import React, { useEffect, useMemo } from "react";
 import { ViewerMutable } from "./ViewerContext";
 import {
@@ -22,6 +24,7 @@ import {
   createTheme,
   useMantineColorScheme,
   useMantineTheme,
+  Group,         // Add this
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 
@@ -333,6 +336,44 @@ function ViewerContents({ children }: { children: React.ReactNode }) {
                 height: "100%",
               })}
             >
+            {/* Replace your existing XR buttons with styled versions: */}
+            <Box
+              style={{
+                position: "absolute",
+                top: "1rem",
+                right: "1rem",
+                zIndex: 10,
+              }}
+            >
+              <Group gap="sm">
+                <div style={{ display: 'inline-block' }}>
+                  <VRButton 
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#228be6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'inline-block' }}>
+                  <ARButton 
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#228be6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              </Group>
+            </Box>
               {canvases}
               {showLogo && messageSource === "websocket" && <ViserLogo />}
             </Box>
@@ -487,17 +528,21 @@ function ViewerCanvas({ children }: { children: React.ReactNode }) {
   const fixedDpr = viewer.useDevSettings((state) => state.fixedDpr);
   const sceneContents = React.useMemo(
     () => (
-      <Bvh firstHitOnly>
-        <BackgroundImage />
-        <SceneContextSetter />
-        {memoizedCameraControls}
-        <SplatRenderContext>
-          <AdaptiveDpr />
-          {children}
-          <SceneNodeThreeObject name="" />
-        </SplatRenderContext>
-        <DefaultLights />
-      </Bvh>
+      <XR>
+      <Controllers />
+      <Hands />
+        <Bvh firstHitOnly>
+          <BackgroundImage />
+          <SceneContextSetter />
+          {memoizedCameraControls}
+          <SplatRenderContext>
+            <AdaptiveDpr />
+            {children}
+            <SceneNodeThreeObject name="" />
+          </SplatRenderContext>
+          <DefaultLights />
+        </Bvh>
+      </XR>
     ),
     [children, memoizedCameraControls],
   );
@@ -508,7 +553,14 @@ function ViewerCanvas({ children }: { children: React.ReactNode }) {
     >
       <Canvas
         camera={{ position: [-3.0, 3.0, -3.0], near: 0.01, far: 1000.0 }}
-        gl={{ preserveDrawingBuffer: true }}
+        gl={{ 
+          preserveDrawingBuffer: true,
+          antialias: false, // Turn off antialias for XR compatibility
+          alpha: false,
+          stencil: false,
+          depth: true,
+          powerPreference: "high-performance"
+        }}
         style={{ width: "100%", height: "100%" }}
         ref={(el) => (viewer.mutable.current.canvas = el)}
         onPointerDown={handlePointerDown}
