@@ -10,6 +10,7 @@ import http
 import logging
 import mimetypes
 import queue
+import ssl
 import threading
 import time
 from asyncio.events import AbstractEventLoop
@@ -232,6 +233,7 @@ class WebsockServer(WebsockMessageHandler):
         http_server_root: Path | None = None,
         verbose: bool = True,
         client_api_version: Literal[0, 1] = 0,
+        ssl_context: ssl.SSLContext | None = None,
     ):
         super().__init__()
 
@@ -251,6 +253,7 @@ class WebsockServer(WebsockMessageHandler):
         self._client_api_version: Literal[0, 1] = client_api_version
         self._background_event_loop: asyncio.AbstractEventLoop | None = None
 
+        self._ssl_context = ssl_context
         self._stop_event: asyncio.Event | None = None
 
         self._client_state_from_id: dict[int, _ClientHandleState] = {}
@@ -569,6 +572,7 @@ class WebsockServer(WebsockMessageHandler):
                         process_request=(
                             viser_http_server if http_server_root is not None else None
                         ),
+                        ssl=self._ssl_context,
                         # Accept connections with version-based protocol and extract version in handler.
                         subprotocols=None,
                         select_subprotocol=lambda _, subprotocols: (
