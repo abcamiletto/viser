@@ -5,6 +5,7 @@ import dataclasses
 import io
 import mimetypes
 import os
+import ssl
 import threading
 import time
 import warnings
@@ -609,6 +610,8 @@ class ViserServer(DeprecatedAttributeShim if not TYPE_CHECKING else object):
         host: Host to bind server to.
         port: Port to bind server to.
         label: Label shown at the top of the GUI panel.
+        enable_webxr: If True, the server will use HTTPS/WSS and expose VR/AR buttons.
+        ssl_context: If provided, will be used for HTTPS/WSS.
     """
 
     # Hide deprecated arguments from docstring and type checkers.
@@ -618,6 +621,8 @@ class ViserServer(DeprecatedAttributeShim if not TYPE_CHECKING else object):
         port: int = 8080,
         label: str | None = None,
         verbose: bool = True,
+        enable_webxr: bool = False,
+        ssl_context: ssl.SSLContext | None = None,
         **_deprecated_kwargs,
     ):
         # Check for port override environment variable
@@ -630,6 +635,19 @@ class ViserServer(DeprecatedAttributeShim if not TYPE_CHECKING else object):
                     f"Invalid _VISER_PORT_OVERRIDE value: {port_override}. Using default port {port}."
                 )
 
+        if enable_webxr and ssl_context is None:
+            cert_dir = Path(__file__).absolute().parent / "infra" / "certs"
+            certfile = cert_dir / "dev.crt"
+            keyfile = cert_dir / "dev.key"
+
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(certfile=str(certfile), keyfile=str(keyfile))
+
+            warnings.warn(
+                "Using bundled self-signed certificates for HTTPS. Do not use in production.",
+                stacklevel=2,
+            )
+
         # Create server.
         server = infra.WebsockServer(
             host=host,
@@ -638,6 +656,7 @@ class ViserServer(DeprecatedAttributeShim if not TYPE_CHECKING else object):
             http_server_root=Path(__file__).absolute().parent / "client" / "build",
             verbose=verbose,
             client_api_version=1,
+            ssl_context=ssl_context,
         )
         self._websock_server = server
 
@@ -756,23 +775,26 @@ class ViserServer(DeprecatedAttributeShim if not TYPE_CHECKING else object):
 
         # Form status print.
         port = server._port  # Port may have changed.
+        is_secure = ssl_context is not None
+        scheme_http = "https" if is_secure else "http"
+        scheme_ws = "wss" if is_secure else "ws"
         if host == "0.0.0.0":
             # 0.0.0.0 is not a real IP and people are often confused by it;
             # we'll just print localhost. This is questionable from a security
             # perspective, but probably fine for our use cases.
-            http_url = f"http://localhost:{port}"
-            ws_url = f"ws://localhost:{port}"
+            http_url = f"{scheme_http}://localhost:{port}"
+            ws_url = f"{scheme_ws}://localhost:{port}"
         else:
-            http_url = f"http://{host}:{port}"
-            ws_url = f"ws://{host}:{port}"
+            http_url = f"{scheme_http}://{host}:{port}"
+            ws_url = f"{scheme_ws}://{host}:{port}"
         table = Table(
             title=None,
             show_header=False,
             box=box.MINIMAL,
             title_style=style.Style(bold=True),
         )
-        table.add_row("HTTP", http_url)
-        table.add_row("Websocket", ws_url)
+        table.add_row("HTTPS" if is_secure else "HTTP", http_url)
+        table.add_row("WebSocket", ws_url)
         rich.print(
             Panel(
                 table,
